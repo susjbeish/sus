@@ -1,0 +1,720 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Vibe Baseball Game - Timing Gauge Edition</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Pretendard', 'Noto Sans KR', sans-serif; background: #111827; color: #fff; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; }
+        #game-container { width: 800px; height: 600px; background: #1e3a1e; border-radius: 12px; position: relative; border: 4px solid #374151; box-shadow: 0 20px 50px rgba(0,0,0,0.6); overflow: hidden; }
+        
+        /* 메뉴 화면 (타이틀, 메인, 난이도 선택) */
+        .menu-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 200; gap: 20px; text-align: center; }
+        .menu-title { font-size: 38px; font-weight: 900; color: #facc15; text-shadow: 0 0 15px rgba(250, 204, 21, 0.6); }
+        .menu-sub { font-size: 16px; color: #94a3b8; }
+        .menu-btn { padding: 14px 28px; font-size: 18px; font-weight: bold; color: #fff; background: #2563eb; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; min-width: 200px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4); }
+        .menu-btn:hover { background: #1d4ed8; transform: translateY(-2px); }
+        .difficulty-group { display: flex; gap: 10px; }
+        .diff-btn { padding: 10px 20px; font-weight: bold; background: #334155; border: 2px solid #475569; color: #fff; border-radius: 6px; cursor: pointer; }
+        .diff-btn.active { border-color: #facc15; background: #eab308; color: #000; }
+
+        /* 심판 시점 야구장 필드 */
+        .field-umpire-view { position: absolute; width: 100%; height: 100%; background: linear-gradient(180deg, #15803d 0%, #166534 60%, #92400e 100%); }
+        .outfield-fence { position: absolute; top: 12%; left: 50%; transform: translateX(-50%); width: 700px; height: 250px; border-top: 8px solid #facc15; border-radius: 50% 50% 0 0; opacity: 0.8; }
+        .mound-far { position: absolute; top: 38%; left: 50%; transform: translateX(-50%); width: 80px; height: 35px; background: #b45309; border-radius: 50%; border: 2px solid #fff; }
+        .pitcher-rubber { position: absolute; top: 40%; left: 50%; transform: translateX(-50%); width: 30px; height: 6px; background: #fff; }
+        .batter-box-left, .batter-box-right { position: absolute; bottom: 40px; width: 70px; height: 170px; border: 3px solid rgba(255, 255, 255, 0.6); }
+        .batter-box-left { left: 240px; }
+        .batter-box-right { right: 240px; }
+        .home-plate-umpire { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 100px; height: 60px; background: #fff; clip-path: polygon(50% 100%, 0 30%, 0 0, 100% 0, 100% 30%); box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+
+        /* 캐릭터 에셋 및 모션 */
+        #pitcher-character { position: absolute; top: 31%; left: 50%; transform: translateX(-50%); width: 24px; height: 50px; z-index: 8; }
+        .pitcher-head { width: 12px; height: 12px; background: #fca5a5; border-radius: 50%; margin: 0 auto; border: 1px solid #000; }
+        .pitcher-body { width: 16px; height: 24px; background: #1e40af; margin: 0 auto; border-radius: 3px; position: relative; }
+        .pitch-windup { animation: windup 0.4s ease-in-out forwards; }
+        @keyframes windup {
+            0% { transform: translateX(-50%) rotate(0deg) scale(1); }
+            50% { transform: translateX(-50%) rotate(-15deg) translateY(-5px) scale(1.1); }
+            100% { transform: translateX(-50%) rotate(10deg) translateY(2px) scale(1); }
+        }
+
+        #batter-character { position: absolute; bottom: 60px; right: 215px; width: 40px; height: 100px; z-index: 15; transform-origin: bottom center; }
+        .batter-head { width: 20px; height: 20px; background: #fca5a5; border-radius: 50%; margin: 0 auto; border: 2px solid #000; }
+        .batter-body { width: 26px; height: 42px; background: #dc2626; margin: 0 auto; border-radius: 4px; position: relative; }
+        .bat { position: absolute; top: -10px; left: -8px; width: 8px; height: 55px; background: #d97706; border-radius: 4px; border: 1px solid #78350f; transform-origin: bottom center; transform: rotate(-35deg); transition: transform 0.1s; }
+        .batter-swing .bat { animation: swingBat 0.25s ease-out forwards; }
+        @keyframes swingBat {
+            0% { transform: rotate(-35deg); }
+            50% { transform: rotate(70deg); }
+            100% { transform: rotate(110deg); }
+        }
+
+        /* 스트라이크 존 및 고깔 게스히팅 영역 */
+        #pitch-outer-area { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); width: 260px; height: 280px; background: rgba(0, 0, 0, 0.25); border: 2px dotted rgba(255, 255, 255, 0.3); border-radius: 8px; cursor: crosshair; }
+        #strike-zone { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); width: 140px; height: 160px; border: 3px solid #f8fafc; background: rgba(56, 189, 248, 0.15); overflow: hidden; pointer-events: none; }
+        #aim-target { position: absolute; width: 18px; height: 18px; border: 2px solid #ef4444; background: rgba(239, 68, 68, 0.4); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; display: none; }
+        
+        #cone-guess-zone { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; z-index: 5; }
+        .cone-shape { position: absolute; width: 100%; height: 100%; background: rgba(250, 204, 21, 0.4); }
+        .cone-N { clip-path: polygon(50% 50%, 0% 0%, 100% 0%); }
+        .cone-S { clip-path: polygon(50% 50%, 0% 100%, 100% 100%); }
+        .cone-W { clip-path: polygon(50% 50%, 0% 0%, 0% 100%); }
+        .cone-E { clip-path: polygon(50% 50%, 100% 0%, 100% 100%); }
+
+        #predicted-ball-marker { position: absolute; width: 20px; height: 20px; border: 2px dashed #22c55e; background: rgba(34, 197, 94, 0.5); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; display: none; z-index: 18; box-shadow: 0 0 10px #22c55e; }
+
+        /* 공 */
+        #ball { position: absolute; width: 10px; height: 10px; background: #fff; border-radius: 50%; border: 1px solid #333; display: none; transform: translate(-50%, -50%); box-shadow: 0 0 12px rgba(255,255,255,0.9); z-index: 20; }
+
+        /* UI 전광판 */
+        .ui-header { position: absolute; top: 15px; left: 20px; right: 20px; display: flex; justify-content: space-between; align-items: flex-start; z-index: 10; }
+        .scoreboard-panel { display: flex; gap: 8px; align-items: center; }
+        .scoreboard { background: rgba(0, 0, 0, 0.85); padding: 10px 14px; border-radius: 8px; font-weight: bold; font-size: 15px; border: 1px solid rgba(255,255,255,0.2); }
+        .base-board { background: rgba(0, 0, 0, 0.85); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); display: flex; justify-content: center; align-items: center; }
+        .diamond-container { width: 42px; height: 42px; position: relative; }
+        .base { position: absolute; width: 14px; height: 14px; background: #334155; border: 1px solid #64748b; transform: rotate(45deg); transition: all 0.3s ease; }
+        .base.base-on { background: #facc15; border-color: #fef08a; box-shadow: 0 0 10px #facc15; }
+        #base-1 { right: 2px; top: 14px; }
+        #base-2 { top: 0px; left: 14px; }
+        #base-3 { left: 2px; top: 14px; }
+
+        .bso-board { background: rgba(0, 0, 0, 0.85); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); font-size: 13px; font-weight: bold; display: flex; flex-direction: column; gap: 4px; }
+        .count-row { display: flex; align-items: center; gap: 8px; }
+        .count-label { width: 12px; text-align: center; }
+        .dots { display: flex; gap: 4px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; background: #333; border: 1px solid #666; }
+        .dot.ball-on { background: #22c55e; border-color: #22c55e; box-shadow: 0 0 6px #22c55e; }
+        .dot.strike-on { background: #eab308; border-color: #eab308; box-shadow: 0 0 6px #eab308; }
+        .dot.out-on { background: #ff4757; border-color: #ff4757; box-shadow: 0 0 6px #ff4757; }
+
+        .morale-container { background: rgba(0, 0, 0, 0.85); padding: 10px 16px; border-radius: 8px; width: 210px; border: 1px solid rgba(255,255,255,0.2); }
+        .morale-bar-bg { width: 100%; height: 12px; background: #334155; border-radius: 6px; overflow: hidden; margin-top: 5px; }
+        .morale-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #eab308, #ef4444); transition: width 0.3s; }
+
+        /* 타자 게스히팅 버튼 패널 */
+        .guess-container { position: absolute; left: 20px; bottom: 80px; z-index: 10; background: rgba(15, 23, 42, 0.85); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); text-align: center; }
+        .guess-grid { display: grid; grid-template-columns: repeat(3, 38px); grid-template-rows: repeat(3, 38px); gap: 4px; margin-top: 6px; justify-content: center; }
+        .guess-btn { background: #334155; color: #fff; border: 1px solid #475569; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px; }
+        .guess-btn:hover { background: #475569; }
+        .guess-btn.active { background: #eab308; color: #000; border-color: #fef08a; font-weight: 900; }
+
+        /* 타이밍 계기판(게이지) 및 스윙 패널 */
+        #batter-swing-area { position: absolute; right: 20px; bottom: 80px; z-index: 10; background: rgba(15, 23, 42, 0.85); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); text-align: center; width: 190px; }
+        .timing-gauge-bar { width: 100%; height: 18px; background: #0f172a; border-radius: 9px; position: relative; overflow: hidden; border: 1px solid #475569; margin-bottom: 10px; }
+        .timing-sweet-spot { position: absolute; left: 35%; width: 30%; height: 100%; background: rgba(34, 197, 94, 0.5); border-left: 2px dashed #22c55e; border-right: 2px dashed #22c55e; }
+        .timing-pointer { position: absolute; left: 0%; width: 6px; height: 100%; background: #facc15; border-radius: 3px; box-shadow: 0 0 6px #facc15; }
+        .swing-trigger-btn { width: 100%; padding: 10px; background: #e11d48; color: #fff; border: none; border-radius: 6px; font-weight: bold; font-size: 15px; cursor: pointer; box-shadow: 0 0 10px rgba(225, 29, 72, 0.5); }
+        .swing-trigger-btn:hover { background: #be123c; }
+
+        /* 투수 패널 */
+        .controls { position: absolute; right: 20px; bottom: 80px; display: flex; flex-direction: column; gap: 8px; z-index: 10; background: rgba(15, 23, 42, 0.85); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); }
+        .btn { padding: 10px 16px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn:hover { background: #1d4ed8; }
+        .btn:disabled { background: #64748b; cursor: not-allowed; }
+        select { padding: 8px; border-radius: 6px; background: #1e293b; color: #fff; border: 1px solid #475569; font-weight: bold; }
+
+        .role-hidden { display: none !important; }
+        #commentary-box { position: absolute; bottom: 15px; left: 20px; right: 20px; background: rgba(15, 23, 42, 0.9); border-left: 5px solid #38bdf8; padding: 12px 18px; border-radius: 4px; font-size: 15px; color: #f8fafc; backdrop-filter: blur(4px); z-index: 10; height: 52px; display: flex; align-items: center; }
+        #fireworks-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="fireworks-canvas"></canvas>
+
+    <!-- 타이틀 화면 -->
+    <div id="title-screen" class="menu-screen">
+        <div class="menu-title">⚾ AI VIBE BASEBALL</div>
+        <div class="menu-sub">바이브 코딩 기반 리얼 타격/투구 야구 게임</div>
+        <button class="menu-btn" onclick="showMainMenu()">클릭해서 게임 시작</button>
+    </div>
+
+    <!-- 메인 메뉴 화면 -->
+    <div id="main-menu" class="menu-screen" style="display:none;">
+        <div class="menu-title">MAIN MENU</div>
+        <button class="menu-btn" onclick="showCpuBattleMenu()">경기 시작 (CPU BATTLE)</button>
+    </div>
+
+    <!-- CPU 난이도 선택 화면 -->
+    <div id="difficulty-screen" class="menu-screen" style="display:none;">
+        <div class="menu-title">CPU 난이도 선택</div>
+        <div class="difficulty-group">
+            <button class="diff-btn active" id="diff-easy" onclick="setDifficulty('easy')">쉬움 (느린 속도)</button>
+            <button class="diff-btn" id="diff-normal" onclick="setDifficulty('normal')">보통</button>
+            <button class="diff-btn" id="diff-hard" onclick="setDifficulty('hard')">어려움</button>
+        </div>
+        <button class="menu-btn" style="background:#16a34a; margin-top:20px;" onclick="startGame()">PLAY GAME</button>
+    </div>
+
+    <!-- 경기 필드 -->
+    <div class="field-umpire-view">
+        <div class="outfield-fence"></div>
+        <div class="mound-far"></div>
+        <div class="pitcher-rubber"></div>
+        
+        <div id="pitcher-character">
+            <div class="pitcher-head"></div>
+            <div class="pitcher-body"></div>
+        </div>
+
+        <div class="batter-box-left"></div>
+        <div class="batter-box-right"></div>
+        
+        <div id="batter-character">
+            <div class="batter-head"></div>
+            <div class="batter-body">
+                <div class="bat"></div>
+            </div>
+        </div>
+
+        <div class="home-plate-umpire"></div>
+    </div>
+
+    <!-- UI 전광판 -->
+    <div class="ui-header">
+        <div class="scoreboard-panel">
+            <div class="scoreboard">
+                <span id="inning-text">1회초</span> | 점수 <span id="score-text">0 - 0</span>
+            </div>
+            
+            <div class="base-board">
+                <div class="diamond-container">
+                    <div class="base" id="base-2"></div>
+                    <div class="base" id="base-3"></div>
+                    <div class="base" id="base-1"></div>
+                </div>
+            </div>
+
+            <div class="bso-board">
+                <div class="count-row">
+                    <span class="count-label" style="color:#22c55e;">B</span>
+                    <div class="dots"><div class="dot" id="b1"></div><div class="dot" id="b2"></div><div class="dot" id="b3"></div></div>
+                </div>
+                <div class="count-row">
+                    <span class="count-label" style="color:#eab308;">S</span>
+                    <div class="dots"><div class="dot" id="s1"></div><div class="dot" id="s2"></div></div>
+                </div>
+                <div class="count-row">
+                    <span class="count-label" style="color:#ef4444;">O</span>
+                    <div class="dots"><div class="dot" id="o1"></div><div class="dot" id="o2"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="morale-container">
+            <div style="display:flex; justify-content:space-between; font-size:13px;">
+                <span>팀 사기 수치</span>
+                <span id="morale-text">0%</span>
+            </div>
+            <div class="morale-bar-bg"><div id="morale-fill" class="morale-bar-fill"></div></div>
+        </div>
+    </div>
+
+    <div id="pitch-outer-area">
+        <div id="strike-zone">
+            <div id="cone-guess-zone">
+                <div id="cone-shape-elem" class="cone-shape cone-N"></div>
+            </div>
+        </div>
+        <div id="aim-target"></div>
+        <div id="predicted-ball-marker"></div>
+    </div>
+    
+    <div id="ball"></div>
+
+    <!-- 타자 4방향 고깔 게스히팅 패널 -->
+    <div class="guess-container" id="batter-ui">
+        <div style="font-size: 11px; color: #cbd5e1; font-weight: bold;">게스히팅 (4방향 고깔)</div>
+        <div class="guess-grid">
+            <div></div>
+            <button class="guess-btn" id="g-N" onclick="selectGuess('N')">북</button>
+            <div></div>
+            <button class="guess-btn" id="g-W" onclick="selectGuess('W')">서</button>
+            <div style="display:flex; align-items:center; justify-content:center; font-size:10px; color:#64748b;">ZONE</div>
+            <button class="guess-btn" id="g-E" onclick="selectGuess('E')">동</button>
+            <div></div>
+            <button class="guess-btn" id="g-S" onclick="selectGuess('S')">남</button>
+            <div></div>
+        </div>
+    </div>
+
+    <!-- 타자 타이밍 계기판 및 스윙 패널 -->
+    <div id="batter-swing-area" class="role-hidden">
+        <div style="font-size: 11px; color: #cbd5e1; margin-bottom:4px;">타이밍 계기판 (스윙!)</div>
+        <div class="timing-gauge-bar">
+            <div class="timing-sweet-spot"></div>
+            <div id="timing-pointer" class="timing-pointer"></div>
+        </div>
+        <button class="swing-trigger-btn" onclick="userClickSwing()">SWING (타격)</button>
+    </div>
+
+    <!-- 투수 패널 -->
+    <div class="controls" id="pitcher-ui">
+        <label style="font-size: 12px; color: #cbd5e1;">투구 구종 선택</label>
+        <select id="pitch-type">
+            <option value="S">직구 (S등급 - 직선 고속)</option>
+            <option value="A">슬라이더 (A등급 - 옆 꺾임)</option>
+            <option value="B">커브 (B등급 - 대각 낙차)</option>
+            <option value="CH">체인지업 (A등급 - 가라앉음)</option>
+            <option value="CT">커터 (S등급 - 미세꺾임)</option>
+            <option value="2S">투심 (S등급 - 역방향)</option>
+            <option value="SI">싱커 (A등급 - 대각선 하강)</option>
+        </select>
+        
+        <button class="btn" id="pitch-btn" style="background:#e11d48; margin-top:10px;" onclick="pitchBall()" disabled>투구 위치 지정 필요</button>
+    </div>
+
+    <div id="commentary-box">
+        <span id="commentary-text">[AI 심판] 경기 시작을 위해 난이도를 선택하세요.</span>
+    </div>
+</div>
+
+<script>
+    let selectedDifficulty = 'easy';
+    let pitchSpeedMultiplier = 1.6;
+
+    let morale = 0;
+    let targetX = 130;
+    let targetY = 140;
+    let isPitching = false;
+    let isGameOver = false;
+
+    let selectedGuess = 'N';
+    let userSwung = false;
+    let currentGaugePos = 0; // 계기판 바늘 위치 (0~100%)
+    let gaugeInterval = null;
+
+    let balls = 0, strikes = 0, outs = 0;
+    let currentInning = 1, isTopInning = true;
+    let scoreAway = 0, scoreHome = 0;
+    let bases = [false, false, false]; 
+
+    const titleScreen = document.getElementById('title-screen');
+    const mainMenu = document.getElementById('main-menu');
+    const difficultyScreen = document.getElementById('difficulty-screen');
+
+    const pitchOuterArea = document.getElementById('pitch-outer-area');
+    const aimTarget = document.getElementById('aim-target');
+    const pitchBtn = document.getElementById('pitch-btn');
+    const ball = document.getElementById('ball');
+    const commentaryText = document.getElementById('commentary-text');
+
+    const batterUI = document.getElementById('batter-ui');
+    const batterSwingArea = document.getElementById('batter-swing-area');
+    const pitcherUI = document.getElementById('pitcher-ui');
+    const coneZone = document.getElementById('cone-guess-zone');
+    const coneShapeElem = document.getElementById('cone-shape-elem');
+    const predictedMarker = document.getElementById('predicted-ball-marker');
+    const timingPointer = document.getElementById('timing-pointer');
+
+    const pitcherChar = document.getElementById('pitcher-character');
+    const batterChar = document.getElementById('batter-character');
+
+    function showMainMenu() {
+        titleScreen.style.display = 'none';
+        mainMenu.style.display = 'flex';
+    }
+
+    function showCpuBattleMenu() {
+        mainMenu.style.display = 'none';
+        difficultyScreen.style.display = 'flex';
+    }
+
+    function setDifficulty(diff) {
+        selectedDifficulty = diff;
+        document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById(`diff-${diff}`).classList.add('active');
+
+        if (diff === 'easy') pitchSpeedMultiplier = 1.8;
+        else if (diff === 'normal') pitchSpeedMultiplier = 1.3;
+        else pitchSpeedMultiplier = 1.0;
+    }
+
+    function startGame() {
+        difficultyScreen.style.display = 'none';
+        updateAICommentary("경기가 시작되었습니다! 투구 위치를 지정하세요.");
+    }
+
+    pitchOuterArea.addEventListener('click', (e) => {
+        if (isPitching || isGameOver || !isTopInning) return;
+        const rect = pitchOuterArea.getBoundingClientRect();
+        targetX = e.clientX - rect.left;
+        targetY = e.clientY - rect.top;
+
+        aimTarget.style.left = `${targetX}px`;
+        aimTarget.style.top = `${targetY}px`;
+        aimTarget.style.display = 'block';
+        
+        pitchBtn.disabled = false;
+        pitchBtn.innerText = "투구하기";
+    });
+
+    function selectGuess(dir) {
+        selectedGuess = dir;
+        document.querySelectorAll('.guess-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById(`g-${dir}`).classList.add('active');
+
+        if (!isTopInning) {
+            coneZone.style.display = 'block';
+            coneShapeElem.className = `cone-shape cone-${dir}`;
+        }
+    }
+
+    // 유저 클릭 스윙 (계기판 바늘 위치 확인)
+    function userClickSwing() {
+        if (!isPitching || userSwung || isTopInning) return;
+        userSwung = true;
+        batterChar.classList.add('batter-swing');
+        if (gaugeInterval) clearInterval(gaugeInterval);
+    }
+
+    function pitchBall() {
+        if (isPitching || isGameOver) return;
+        isPitching = true;
+        userSwung = false;
+        currentGaugePos = 0;
+        timingPointer.style.left = '0%';
+        pitchBtn.disabled = true;
+        predictedMarker.style.display = 'none';
+
+        pitcherChar.classList.add('pitch-windup');
+
+        setTimeout(() => {
+            const pitchTypeOptions = ['S', 'A', 'B', 'CH', 'CT', '2S', 'SI'];
+            const pitchType = isTopInning ? document.getElementById('pitch-type').value : pitchTypeOptions[Math.floor(Math.random() * pitchTypeOptions.length)];
+            const outerRect = pitchOuterArea.getBoundingClientRect();
+            const containerRect = document.getElementById('game-container').getBoundingClientRect();
+            
+            const startX = 400;
+            const startY = 220;
+            
+            if (!isTopInning) {
+                targetX = outerRect.width / 2 - 70 + Math.random() * 140;
+                targetY = outerRect.height / 2 - 80 + Math.random() * 160;
+            }
+
+            const finalX = (outerRect.left - containerRect.left) + targetX;
+            const finalY = (outerRect.top - containerRect.top) + targetY;
+
+            let actualDir = 'N';
+            if (targetY < 130) actualDir = 'N';
+            else if (targetY >= 210) actualDir = 'S';
+            else if (targetX < 130) actualDir = 'W';
+            else actualDir = 'E';
+
+            const isGuessCorrect = (selectedGuess === actualDir);
+
+            if (!isTopInning && isGuessCorrect) {
+                predictedMarker.style.left = `${targetX}px`;
+                predictedMarker.style.top = `${targetY}px`;
+                predictedMarker.style.display = 'block';
+                updateAICommentary("⚡ 고깔 게스히팅 적중! 예상 투구 위치가 초록색으로 표시됩니다!");
+            }
+
+            ball.style.left = `${startX}px`;
+            ball.style.top = `${startY}px`;
+            ball.style.width = '6px';
+            ball.style.height = '6px';
+            ball.style.display = 'block';
+
+            let baseSpeed = 500;
+            if (pitchType === 'S' || pitchType === 'CT' || pitchType === '2S') baseSpeed = 420;
+            else if (pitchType === 'A' || pitchType === 'SI') baseSpeed = 580;
+            else if (pitchType === 'B') baseSpeed = 700;
+            else if (pitchType === 'CH') baseSpeed = 750;
+
+            let speed = baseSpeed * pitchSpeedMultiplier;
+
+            // 공이 날아오는 동안 계기판 바늘(Pointer) 이동 애니메이션 구동 (0% -> 100%)
+            gaugeInterval = setInterval(() => {
+                currentGaugePos += 2;
+                if (currentGaugePos > 100) currentGaugePos = 100;
+                timingPointer.style.left = `${currentGaugePos}%`;
+            }, speed / 50);
+
+            let keyframes = [];
+            if (pitchType === 'S') {
+                keyframes = [
+                    { left: `${startX}px`, top: `${startY}px`, width: '6px', height: '6px' },
+                    { left: `${finalX}px`, top: `${finalY}px`, width: '22px', height: '22px' }
+                ];
+            } else if (pitchType === 'A') {
+                const midX = startX + (finalX - startX) * 0.6 - 35;
+                const midY = startY + (finalY - startY) * 0.5;
+                keyframes = [
+                    { left: `${startX}px`, top: `${startY}px`, width: '6px', height: '6px' },
+                    { left: `${midX}px`, top: `${midY}px`, width: '14px', height: '14px' },
+                    { left: `${finalX}px`, top: `${finalY}px`, width: '22px', height: '22px' }
+                ];
+            } else if (pitchType === 'B') {
+                const midX = startX + (finalX - startX) * 0.5;
+                const midY = startY - 35;
+                keyframes = [
+                    { left: `${startX}px`, top: `${startY}px`, width: '6px', height: '6px' },
+                    { left: `${midX}px`, top: `${midY}px`, width: '15px', height: '15px' },
+                    { left: `${finalX}px`, top: `${finalY}px`, width: '22px', height: '22px' }
+                ];
+            } else if (pitchType === 'CH') {
+                const midX = startX + (finalX - startX) * 0.7;
+                const midY = startY + (finalY - startY) * 0.6 + 20;
+                keyframes = [
+                    { left: `${startX}px`, top: `${startY}px`, width: '6px', height: '6px' },
+                    { left: `${midX}px`, top: `${midY}px`, width: '12px', height: '12px' },
+                    { left: `${finalX}px`, top: `${finalY}px`, width: '22px', height: '22px' }
+                ];
+            } else if (pitchType === 'CT') {
+                const midX = startX + (finalX - startX) * 0.85 - 15;
+                const midY = startY + (finalY - startY) * 0.85;
+                keyframes = [
+                    { left: `${startX}px`, top: `${startY}px`, width: '6px', height: '6px' },
+                    { left: `${midX}px`, top: `${midY}px`, width: '18px', height: '18px' },
+                    { left: `${finalX}px`, top: `${finalY}px`, width: '22px', height: '22px' }
+                ];
+            } else if (pitchType === '2S') {
+                const midX = startX + (finalX - startX) * 0.6 + 30;
+                const midY = startY + (finalY - startY) * 0.5;
+                keyframes = [
+                    { left: `${startX}px`, top: `${startY}px`, width: '6px', height: '6px' },
+                    { left: `${midX}px`, top: `${midY}px`, width: '14px', height: '14px' },
+                    { left: `${finalX}px`, top: `${finalY}px`, width: '22px', height: '22px' }
+                ];
+            } else if (pitchType === 'SI') {
+                const midX = startX + (finalX - startX) * 0.6 + 25;
+                const midY = startY + (finalY - startY) * 0.5 + 25;
+                keyframes = [
+                    { left: `${startX}px`, top: `${startY}px`, width: '6px', height: '6px' },
+                    { left: `${midX}px`, top: `${midY}px`, width: '14px', height: '14px' },
+                    { left: `${finalX}px`, top: `${finalY}px`, width: '22px', height: '22px' }
+                ];
+            }
+
+            if (isTopInning) {
+                setTimeout(() => {
+                    batterChar.classList.add('batter-swing');
+                }, speed * 0.5);
+            }
+
+            ball.animate(keyframes, {
+                duration: speed,
+                easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+            }).onfinish = () => {
+                if (gaugeInterval) clearInterval(gaugeInterval);
+                resolvePitchResult(targetX, targetY, isGuessCorrect);
+            };
+        }, 300);
+    }
+
+    function resolvePitchResult(x, y, isGuessCorrect) {
+        const outerRect = pitchOuterArea.getBoundingClientRect();
+        const zoneElem = document.getElementById('strike-zone');
+        const zoneRect = zoneElem.getBoundingClientRect();
+        const zoneLeft = zoneRect.left - outerRect.left;
+        const zoneTop = zoneRect.top - outerRect.top;
+
+        const isInsideStrikeZone = (x >= zoneLeft && x <= zoneLeft + zoneRect.width && y >= zoneTop && y <= zoneTop + zoneRect.height);
+
+        if (!isTopInning) {
+            if (userSwung) {
+                // 계기판 스위트 스팟 범위: 35% ~ 65% (매우 널널하고 직관적임)
+                const isTimingGood = (currentGaugePos >= 25 && currentGaugePos <= 75);
+
+                if (isTimingGood) {
+                    if (isGuessCorrect) {
+                        advanceRunners(4, "계기판 타이밍 퍼펙트 & 고깔 게스히팅 적중! 대형 홈런!!");
+                    } else {
+                        let defenseRand = Math.random();
+                        if (defenseRand < 0.45) {
+                            advanceRunners(1, "나이스 타이밍 타격! 깔끔한 안타!");
+                        } else if (defenseRand < 0.7) {
+                            addOut("외야수 정면으로 잡히는 [플라이 아웃]!");
+                        } else if (defenseRand < 0.88 && bases[0]) {
+                            triggerDoublePlay();
+                        } else {
+                            addOut("야구 글러브로 강하게 빨려 들어가는 [직선타 아웃]!");
+                        }
+                    }
+                } else {
+                    addStrike("타이밍 게기판 맞춤 실패! 헛스윙!");
+                }
+            } else {
+                if (isInsideStrikeZone) addStrike("지켜본 스트라이크!");
+                else addBall("지켜본 볼!");
+            }
+        } else {
+            if (isInsideStrikeZone) addStrike("스트라이크 존 적중! 스트라이크!");
+            else addBall("스트라이크 존 탈락! 볼 판정.");
+        }
+
+        setTimeout(() => {
+            pitcherChar.classList.remove('pitch-windup');
+            batterChar.classList.remove('batter-swing');
+            predictedMarker.style.display = 'none';
+
+            if (!isGameOver) {
+                ball.style.display = 'none';
+                aimTarget.style.display = 'none';
+                pitchBtn.innerText = "투구 위치 지정 필요";
+                isPitching = false;
+
+                if (!isTopInning) setTimeout(pitchBall, 1500);
+            }
+        }, 1200);
+    }
+
+    function triggerDoublePlay() {
+        outs += 2;
+        bases[0] = false;
+        updateBasesUI();
+        updateAICommentary("🚨 내야 땅볼로 연결된 [병살타(Double Play)]!");
+        resetAtBatCount();
+        if (outs >= 3) setTimeout(switchInning, 1000);
+        updateBSOUI();
+    }
+
+    function addOut(msg) {
+        outs++;
+        updateAICommentary(msg);
+        resetAtBatCount();
+        if (outs >= 3) setTimeout(switchInning, 1000);
+        updateBSOUI();
+    }
+
+    function advanceRunners(numBases, msg) {
+        let runsScored = 0;
+        if (numBases === 4) {
+            runsScored = bases.filter(b => b).length + 1;
+            bases = [false, false, false];
+        } else {
+            for (let i = 0; i < numBases; i++) {
+                if (bases[2]) runsScored++;
+                bases[2] = bases[1];
+                bases[1] = bases[0];
+                bases[0] = (i === 0);
+            }
+        }
+
+        if (runsScored > 0) {
+            if (isTopInning) scoreAway += runsScored; else scoreHome += runsScored;
+        }
+
+        updateScoreUI();
+        updateBasesUI();
+        updateAICommentary(`${msg} (${runsScored > 0 ? runsScored + '득점!' : '주자 진루'})`);
+        resetAtBatCount();
+    }
+
+    function addStrike(msg) {
+        strikes++;
+        if (strikes >= 3) {
+            outs++;
+            increaseMorale(20);
+            updateAICommentary(`삼진 아웃! (현재 ${outs}아웃)`);
+            resetAtBatCount();
+            if (outs >= 3) setTimeout(switchInning, 1000);
+        } else {
+            updateAICommentary(msg);
+        }
+        updateBSOUI();
+    }
+
+    function addBall(msg) {
+        balls++;
+        if (balls >= 4) {
+            advanceRunners(1, "4볼! 밀어내기 출루!");
+        } else {
+            updateAICommentary(msg);
+        }
+        updateBSOUI();
+    }
+
+    function switchInning() {
+        outs = 0;
+        bases = [false, false, false];
+        updateBasesUI();
+        resetAtBatCount();
+
+        if (isTopInning) {
+            isTopInning = false;
+            pitcherUI.classList.add('role-hidden');
+            batterUI.classList.remove('role-hidden');
+            batterSwingArea.classList.remove('role-hidden');
+            coneZone.style.display = 'block';
+            selectGuess('N');
+            updateAICommentary("공수 교대! 계기판의 초록색 스위트 스팟에 맞춰 SWING 버튼을 누르세요.");
+            setTimeout(pitchBall, 1500);
+        } else {
+            if (currentInning >= 9) {
+                if (scoreAway !== scoreHome) {
+                    endGame(`경기 종료 (${scoreAway} - ${scoreHome})`);
+                    return;
+                } else if (currentInning === 11) {
+                    endGame(`11회말 무승부 종료 (${scoreAway} - ${scoreHome})`);
+                    return;
+                }
+            }
+            currentInning++;
+            isTopInning = true;
+            batterUI.classList.add('role-hidden');
+            batterSwingArea.classList.add('role-hidden');
+            pitcherUI.classList.remove('role-hidden');
+            coneZone.style.display = 'none';
+            predictedMarker.style.display = 'none';
+            updateAICommentary(`공수 교대! ${currentInning}회초 시작 (투수 수비 모드)`);
+        }
+
+        updateScoreUI();
+    }
+
+    function resetAtBatCount() { balls = 0; strikes = 0; updateBSOUI(); }
+
+    function updateScoreUI() {
+        document.getElementById('inning-text').innerText = `${currentInning}회${isTopInning ? '초' : '말'}`;
+        document.getElementById('score-text').innerText = `${scoreAway} - ${scoreHome}`;
+    }
+
+    function updateBasesUI() {
+        document.getElementById('base-1').className = bases[0] ? 'base base-on' : 'base';
+        document.getElementById('base-2').className = bases[1] ? 'base base-on' : 'base';
+        document.getElementById('base-3').className = bases[2] ? 'base base-on' : 'base';
+    }
+
+    function updateBSOUI() {
+        document.getElementById('b1').className = balls >= 1 ? 'dot ball-on' : 'dot';
+        document.getElementById('b2').className = balls >= 2 ? 'dot ball-on' : 'dot';
+        document.getElementById('b3').className = balls >= 3 ? 'dot ball-on' : 'dot';
+
+        document.getElementById('s1').className = strikes >= 1 ? 'dot strike-on' : 'dot';
+        document.getElementById('s2').className = strikes >= 2 ? 'dot strike-on' : 'dot';
+
+        document.getElementById('o1').className = outs >= 1 ? 'dot out-on' : 'dot';
+        document.getElementById('o2').className = outs >= 2 ? 'dot out-on' : 'dot';
+    }
+
+    function increaseMorale(val) {
+        morale = Math.min(100, morale + val);
+        document.getElementById('morale-fill').style.width = `${morale}%`;
+        document.getElementById('morale-text').innerText = `${morale}%`;
+    }
+
+    function updateAICommentary(text) { commentaryText.innerText = `[AI 심판 중계] ${text}`; }
+
+    function endGame(resultMsg) {
+        isGameOver = true;
+        pitchBtn.disabled = true;
+        pitchBtn.innerText = "경기 종료";
+        updateAICommentary(`🏁 ${resultMsg}`);
+    }
+
+    // 초기 세팅
+    batterUI.classList.add('role-hidden');
+    batterSwingArea.classList.add('role-hidden');
+    coneZone.style.display = 'none';
+    selectGuess('N');
+    updateBasesUI();
+</script>
+</body>
+</html>
